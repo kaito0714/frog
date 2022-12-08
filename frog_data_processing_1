@@ -37,7 +37,7 @@ for i in folders:
     plt.savefig(i+'/field_vs_time.png', facecolor="white", dpi=150)
     plt.show()
     
-    #--------------- speck.dat ---------------
+    #--------------- speck.dat ----------------
     _wavelength, _intensity, _Phase = np.loadtxt(_speck, usecols=(0,1,2), unpack=True)
 #     print(_speck)
     fig, ax1 = plt.subplots()
