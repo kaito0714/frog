@@ -1,0 +1,179 @@
+%matplotlib inline
+import numpy as np
+import numpy.matlib
+import matplotlib.pyplot as plt
+import os
+import glob
+import pandas as pd
+from scipy.interpolate import interp1d
+
+lam_d = 1.5
+lam = np.arange(600, 1250+lam_d, lam_d)
+
+lam_comb = 935
+
+overlap_d = 0.5
+overlap = np.arange(930, 940+overlap_d, overlap_d)
+
+overlap_tau = 300
+
+max_tau_range = 800
+
+filter_tau = 0
+
+f_e_correct = 0
+
+set_zero = 1200
+
+delay_center = 1
+
+correct_filter = 0
+
+folders = glob.glob('file_name*') #Folder name is the name of the folder containing the file to be processed
+for ll in range(len(folders)):
+
+    # ------------------------------ flame.frg ------------------------------
+    flame_file_name = glob.glob(folders[ll]+'/*flame.frg')[0]
+    print(flame_file_name)
+    flame_df = pd.read_csv(flame_file_name, header=None, names=['col'])['col'].str.split('\t', expand=True).astype(float)
+    Ntau = flame_df.iloc[0,0]
+    dt = flame_df.iloc[1,0]
+    ftau = ((np.arange(1,Ntau+1)) - Ntau / 2) * dt
+#     Nlam = flame_df.iloc[0,1]
+#     dlam = flame_df.iloc[1,1]
+#     flam = ((np.arange(1,Nlam+1)) - Nlam / 2) * dlam + flame_df.iloc[1,2]
+    flame = flame_df[2:]
+#     tmp = pd.read_csv('Flame_1ms_100av_Background_16-22-42-482.txt', header=None, names=['col'])['col'].str.split('\t', expand=True)[1:].astype(float)
+    flam = pd.read_csv('Wavelengths_Flame.txt', header=None, names=['col'])['col'].astype(float)
+    
+    claf = pd.concat([pd.read_csv('flame_callibration_file.csv', header=None, names=['col1', 'col2'])['col2'].astype(float), pd.Series([0])])
+    flamec = np.array(flame) * (claf.values.reshape(-1,1) * np.ones(flame.shape))
+
+    # ------------------------------ NIR.frg ------------------------------
+    NIR_file_name = glob.glob(folders[ll]+'/*NIR.frg')[0]
+    NIR_df = pd.read_csv(NIR_file_name, header=None, names=['col'])['col'].str.split('\t', expand=True).astype(float)
+#     Nlam = NIR_df.iloc[0,1]
+#     dlam = NIR_df.iloc[1,1]
+#     NIRlam = ((np.arange(1,Nlam+1)) - Nlam / 2) * dlam + NIR_df.iloc[1,2]
+    NIR = NIR_df[2:]
+#     tmp = pd.read_csv('FROG_NIR_1ms_20av_Background_17-14-14-907.txt', header=None, names=['col'])['col'].str.split('\t', expand=True)[1:].astype(float)
+    NIRlam = pd.read_csv('Wavelengths_NIRQUEST.txt', header=None, names=['col'])['col'].astype(float)
+
+    claNIR = pd.concat([pd.read_csv('NIRQUEST_callibration_file.csv', header=None, names=['col1', 'col2'])['col2'].astype(float), pd.Series([0])])
+    NIRc = np.array(NIR) * (claNIR.values.reshape(-1,1) * np.ones(NIR.shape))
+
+
+    # ------------------------------ finding difference factor and stitching ------------------------------
+    flamei = np.empty((lam.shape[0], flamec.shape[1]))
+    NIRi = np.empty((lam.shape[0], NIRc.shape[1]))
+    factors = np.zeros((lam.shape[0], NIRc.shape[1]))
+    for m in range(flame.shape[1]):
+        flame_f = interp1d(flam, flamec[:,m], kind=3, bounds_error=False, fill_value=0.)
+        flamei[:,m] = flame_f(lam).reshape(-1)
+
+        NIR_f = interp1d(NIRlam, NIRc[:,m], kind=3, bounds_error=False, fill_value=0.)
+        NIRi[:,m] = NIR_f(lam).reshape(-1)
+
+    ind = []
+    for i in overlap:
+        ind_value = np.where(round(i,1) == lam)[0]
+        if ind_value.shape[0] ==1:
+            ind.append(ind_value[0])
+    for mm in range(flame.shape[1]):
+        factors[ind[0]:ind[-1]+1:,mm] = flamei[ind[0]:ind[-1]+1,mm] / NIRi[ind[0]:ind[-1]+1,mm]
+
+    ind3 = np.where(abs(ftau)<overlap_tau)[0]
+    tmp = np.mean(factors[ind[0]:ind[-1]+1:,ind3[0]:ind3[-1]+1])
+    tmp = np.sum(factors[ind[0]:ind[-1]+1] * flamei[ind[0]:ind[-1]+1, 0:flamei.shape[1]]**4) / np.sum(flamei[ind[0]:ind[-1]+1, 0:flamei.shape[1]]**4)
+    NIRi = NIRi * abs(tmp)
+
+    ind = np.where(lam < lam_comb)[0]
+    ind2 = np.where(lam >= lam_comb)[0]
+    stitchedi = np.concatenate([ flamei[ind[0]:ind[-1]+1,:], NIRi[ind2[0]:ind2[-1]+1,:] ])
+
+    ind4 = np.where(abs(ftau) < max_tau_range)[0]
+    stitchedi = stitchedi[:,ind4[0]:ind4[-1]+1]
+    ftau = ftau[ind4[0]:ind4[-1]+1]
+
+    if filter_tau:
+        for k in range(stitchedi.shape[0]):
+            A = stitchedi[k,:]
+            Y = np.fft.fft(A)
+            if Y.shape[0]%2 == 0:
+                Y_center = int(Y.shape[0]/2) -1
+            else:
+                Y_center = int(Y.shape[0]/2)
+            Y[Y_center - filter_tau:Y_center + filter_tau+1] = 0
+            stitchedi[k,:] = np.abs(np.fft.ifft(Y))
+        for k in range(stitchedi.shape[1]):
+            A = stitchedi[:,k]
+            Y = np.fft.fft(A)
+            if Y.shape[0]%2 == 0:
+                Y_center = int(Y.shape[0]/2) -1
+            else:
+                Y_center = int(Y.shape[0]/2)
+            Y[Y_center - filter_tau:Y_center + filter_tau+1] = 0
+            stitchedi[:,k] = np.abs(np.fft.ifft(Y))
+
+
+    if f_e_correct:
+        stitchedi = stitchedi / (np.square(lam).reshape(-1,1) * np.ones(stitchedi.shape))
+
+    if delay_center == 1:
+        indd = np.where(sum(stitchedi) >= max(sum(stitchedi)))[0][0]
+    elif delay_center == 2:
+        c = np.cumsum(sum(stitchedi))
+        tt = np.where(c >= max(c)/2)[0]
+        indd = tt[0]
+
+    if delay_center > 0:
+        if len(ftau) % 2 == 0:
+            tt = int(len(ftau)/2 - indd - 1)
+        else:
+            tt = int(len(ftau)/2 - indd)
+            if tt > 0:
+                stitchedi = stitchedi[:,0:-int(tt)]
+                ftau = ftau[0:-int(tt)] + ftau[-1] - ftau[-int(tt+1)]
+
+            elif tt < 0:
+                tt = abs(tt)
+                stitchedi = stitchedi[:,tt:]
+                ftau = ftau[tt:] + ftau[0] - ftau[tt]
+
+    if correct_filter:
+        f03 = np.array(pd.read_excel('NENIR03A.xlsx'))
+        f10 = np.array(pd.read_excel('NENIR10A.xlsx'))
+        f03_f = interp1d(f03[:,2].astype(float), f03[:,3].astype(float), kind=3, bounds_error=False)
+        f10_f = interp1d(f10[0:f03.shape[0],2].astype(float), f10[0:f03.shape[0],3].astype(float), kind=3, bounds_error=False)
+        f03i = f03_f(lam)
+        f10i = f10_f(lam)
+        corr = np.array(10000 / (f03i * f10i)).reshape(-1,1)
+        corrm = np.matlib.repmat(corr,1,353)
+        stitchedi = stitchedi * corrm
+    
+    # ------------------------------ figure ------------------------------
+    fig, ax = plt.subplots()
+    ax.pcolormesh(ftau, lam, stitchedi, shading='gouraud')
+    ax.set_title(folders[ll])
+    ax.set_xlabel('Delay (fs)')
+    ax.set_ylabel('Wavelength (nm)')
+    ax.vlines(0, lam[0], lam[-1], colors='white', linewidth=0.5)
+    fig.savefig(flame_file_name.replace('flame.frg', 'stitched3_python.png'), facecolor="white", dpi=300)
+    #fig.plot()#
+    plt.show()
+
+    # ------------------------------ setting values above set_zero to zerog ------------------------------
+    indl = np.where(lam > set_zero)[0]
+    stitchedi[indl[0]:,:] = 0
+
+    # ------------------------------ saving stitched frog trace ------------------------------
+    pl = stitchedi.shape[0]
+    pt = stitchedi.shape[1]
+    dt = ftau[1] - ftau[0]
+    dlam = lam[1] - lam[0]
+    lamc = (lam[-1]+lam[0])/2
+    save_file = flame_file_name.replace('flame.frg', 'stitched3_python.frg')
+    condition = pd.DataFrame(columns = [str(pt), str(pl), str(dt), str(dlam), str(lamc)])
+    condition.to_csv(save_file, index=False, sep='\t')
+    stitchedi =pd.DataFrame(stitchedi)
+    stitchedi.to_csv(save_file, mode='a', header=False, index=False, sep='\t')
