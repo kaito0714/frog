@@ -1,0 +1,62 @@
+%matplotlib inline
+import numpy as np
+import numpy.matlib
+import matplotlib.pyplot as plt
+import os
+import glob
+import pandas as pd
+
+#--------------- wavelength setup ---------------
+min_lam = 1000
+max_lam = 2000
+
+folders = glob.glob('folder_name*') #Folder name is the name of the folder containing the processed data
+for i in folders:
+    print(i)
+    _speck, _ek = map(str, glob.glob(i+'/*k.dat')[0:])
+    
+    #--------------- ek.dat ---------------
+    _time, _intensity, _Phase = np.loadtxt(_ek, usecols=(0,1,2), unpack=True)
+    
+    fig, ax1 = plt.subplots()
+    
+    ax1.plot(_time, _intensity, label='Intensity', color='red', linewidth=0.5)
+    ax1.set_xlabel('Time(fs)')
+    ax1.set_ylabel('Intensity', color='red')
+    ax1.set_xlim(min(_time), max(_time)) #(min(_time), max(_time))
+    ax1.set_ylim(0, max(_intensity))
+    ax1.tick_params(axis='y', labelcolor='red')   
+    plt.legend(loc='upper left', bbox_to_anchor=(1.1, 1), frameon=False)
+    
+    ax2 = ax1.twinx()
+    ax2.plot(_time, _Phase, label='Phase', color='green', linewidth=0.5)
+    ax2.set_ylabel('phase(radians)', color='green', rotation=-90, labelpad=15)
+    ax2.set_ylim(0, max(_Phase))
+    ax2.tick_params(axis='y', labelcolor='green')
+    plt.legend(loc='upper left', bbox_to_anchor=(1.1, 0.9), frameon=False)
+    ax1.set_title('time domain')
+    plt.savefig(i+'/ek.png', facecolor="white", dpi=150, bbox_inches='tight')
+    plt.show()
+    
+    #--------------- speck.dat ---------------
+    _wavelength, _intensity, _Phase = np.loadtxt(_speck, usecols=(0,1,2), unpack=True)
+    
+    fig, ax1 = plt.subplots()
+    
+    ax1.plot(_wavelength, _intensity, label='Intensity', color='red', linewidth=0.5)
+    ax1.set_xlabel('Wavelength(nm)')
+    ax1.set_ylabel('Intensity', color='red')
+    # ax1.set_xlim(min_lam, max_lam)
+    ax1.set_ylim(0, max(_intensity))
+    ax1.tick_params(axis='y', labelcolor='red')
+    plt.legend(loc='upper left', bbox_to_anchor=(1.1, 1), frameon=False)
+    
+    ax2 = ax1.twinx()
+    ax2.plot(_wavelength, _Phase, label='Phase', color='green', linewidth=0.5)
+    ax2.set_ylabel('Phase(radians)', color='green', rotation=-90, labelpad=15)
+    ax2.set_ylim(0, max(_Phase))
+    ax2.tick_params(axis='y', labelcolor='green')
+    plt.legend(loc='upper left', bbox_to_anchor=(1.1, 0.9), frameon=False)
+    ax1.set_title('spectrum')
+    plt.savefig(i+'/speck.png', facecolor="white", dpi=150, bbox_inches='tight')
+    plt.show()
