@@ -1,0 +1,54 @@
+%matplotlib inline
+import numpy as np
+import numpy.matlib
+import matplotlib.pyplot as plt
+import os
+import glob
+import pandas as pd
+
+#--------------- wavelength setup ---------------
+min_lam = 1600
+max_lam = 1900
+cwl = 1965 * 10**-3 # center wavelength [m]
+c = 299792458 * 10**15 # light velocity [m/fs]
+c_omega = 2 * np.pi * c / cwl
+
+folders = glob.glob('folder_name*') #
+Folder name specifies the folder containing the data to be processed
+for i in folders:
+    print(i)
+    _ek, _speck = map(str, glob.glob(i+'/*k.dat')[0:])
+    
+    #--------------- ek.dat ---------------
+    _time, _intensity, _Phase, _rField, _iField = np.loadtxt(_ek, usecols=(0,1,2,3,4), unpack=True)
+#     print(_ek)
+    
+    fig, ax1 = plt.subplots()
+    
+    _field = _rField * np.cos(c_omega * _time) + _iField * np.sin(c_omega * _time)
+    _field2 = np.sqrt(_intensity) * np.cos(c_omega*_time + _Phase)
+    
+    ax1.plot(_time, _field, label='Field', color='red', linewidth=0.5)
+    ax1.set_xlabel('Time(fs)')
+    ax1.set_ylabel('Field')
+    ax1.set_xlim(min(_time), max(_time))
+#     ax1.set_ylim(0, max(_rField))
+    ax1.set_title('Field vs Time')        
+    plt.savefig(i+'/field_vs_time.png', facecolor="white", dpi=150)
+    plt.show()
+    
+    #--------------- speck.dat ---------------
+    _wavelength, _intensity, _Phase = np.loadtxt(_speck, usecols=(0,1,2), unpack=True)
+#     print(_speck)
+    fig, ax1 = plt.subplots()
+    
+    ax1.plot(_wavelength, _intensity, label='Intensity', color='red', linewidth=0.5)
+    ax1.set_xlabel('Wavelength(nm)')
+    ax1.set_ylabel('Intensity')
+    ax1.set_xlim(min_lam, max_lam)
+#     ax1.set_ylim(min(_intensity), max(_intensity))
+    ax1.set_yscale('log')
+    ax1.set_title('Intensity vs Wavekength')
+        
+    plt.savefig(i+'/intensity_vs_wavelength.png', facecolor="white", dpi=150, bbox_inches='tight')
+    plt.show()
